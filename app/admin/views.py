@@ -1,23 +1,50 @@
-from flask import render_template
+from functools import wraps
+
+from flask import render_template, url_for, redirect, flash, session, request
+
+from app.admin.forms import LoginForm
 from app.admin import admin
+from app.models import Admin
+
+
+def admin_login_req(func):
+    @wraps(func)
+    def decorator_function(*args, **kwargs):
+        if 'admin' not in session:
+            return redirect(url_for('admin.login', next=request.url))
+        return func(*args, **kwargs)
+
+    return decorator_function
 
 
 @admin.route('/')
+@admin_login_req
 def index():
     return render_template('admin/index.html')
 
 
-@admin.route('/login')
+@admin.route('/login', methods=['GET', 'POST'])
 def login():
-    return render_template('admin/login.html')
+    form = LoginForm()
+    if form.validate_on_submit():
+        data = form.data
+        admin = Admin.query.filter_by(name=data['account']).first()
+        if not admin.check_pwd(data['pwd']):
+            flash('密码错误！')
+            return redirect(url_for('admin.login'))
+        session['admin'] = data['account']
+        return redirect(request.args.get('next') or url_for('admin.index'))
+    return render_template('admin/login.html', form=form)
 
 
 @admin.route('/logout')
 def logout():
-    pass
+    session.pop('admin', None)
+    return redirect(url_for('admin.login'))
 
 
 @admin.route('/tag_add')
+@admin_login_req
 def tag_add():
     return render_template('admin/tag_add.html')
 
